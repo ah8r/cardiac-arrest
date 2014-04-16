@@ -2,9 +2,9 @@
 
 # Hut3 Cardiac Arrest - A script to check OpenSSL servers for the Heartbleed bug (CVE-2014-0160).
 #
-# DISCLAIMER: There have been unconfirmed reports that this script can crash certain servers.
-# This script complies with the TLS specification, so any crashes are the result of a bad
-# implementation of TLS on the server side. CNS Hut3 and Adrian Hayter do not accept
+# DISCLAIMER: There have been unconfirmed reports that this script can render HP iLO unresponsive.
+# This script complies with the TLS specification, so responsitivity issues are likely the result 
+# of a bad implementation of TLS on the server side. CNS Hut3 and Adrian Hayter do not accept
 # responsibility if this script crashes a server you test it against. USE IT AT YOUR OWN RISK.
 # As always, the correct way to test for the vulnerability is to check the version of OpenSSL
 # installed on the server in question. OpenSSL 1.0.1 through 1.0.1f are vulnerable.
