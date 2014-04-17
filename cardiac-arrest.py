@@ -20,11 +20,11 @@
 #
 # Test all SSL/TLS protocols against 192.168.0.1 and 192.168.0.2 on ports 443 and 8443:
 #
-#    python heartattack.py -p 443,8443 192.168.0.1 192.168.0.2
+#    python cardiac-arrest.py -p 443,8443 192.168.0.1 192.168.0.2
 #
 # Test the TLSv1.2 protocol against 192.168.0.1 using SMTP STARTTLS on port 25:
 #
-#    python heartattack.py -s smtp -p 25 -V TLSv1.2 192.168.0.1
+#    python cardiac-arrest.py -s smtp -p 25 -V TLSv1.2 192.168.0.1
 #
 #
 # Several sections of code have been lifted from other detection scripts and
