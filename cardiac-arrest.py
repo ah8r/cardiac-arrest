@@ -225,7 +225,7 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
                 return False
     
     except socket.error as e:
-        print >> sys.stderr, '\033[93m[ERROR] Connection error. The port might not be open on the host.\033[0m\n'
+        print >> sys.stderr, '\033[93m[ERROR] Connection error: ' + str(e.strerror) + ' \033[0m\n'
         sys.stderr.flush()
         return False
 
