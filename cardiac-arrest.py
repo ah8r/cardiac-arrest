@@ -230,7 +230,7 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
         return False
 
 def main():
-    global bytes, display_null_bytes, verbose
+    global num_bytes_per_line, display_null_bytes, verbose
     
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--ports', type=str, default='443', help='Comma separated list of ports to check (default: 443)')
@@ -250,7 +250,7 @@ def main():
         parser.print_help()
         sys.exit(1)
     
-    bytes = args.bytes
+    num_bytes_per_line = args.bytes
     display_null_bytes = args.null_bytes
     verbose = args.verbose
     
