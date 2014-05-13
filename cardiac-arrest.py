@@ -48,6 +48,7 @@ import string
 num_bytes_per_line = 16
 display_null_bytes = False
 verbose = False
+quietleak = False
 
 starttls_options = ['none', 'smtp', 'pop3', 'imap', 'ftp']
 protocol_hex_to_name = {0x00:'SSLv3', 0x01:'TLSv1.0', 0x02:'TLSv1.1', 0x03:'TLSv1.2'}
@@ -198,13 +199,14 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
             if type == 24:
                 if len(payload) > 3:
                     print '\033[91m\033[1m[FAIL] Heartbeat response was ' + str(len(payload)) + ' bytes instead of 3! ' + str(ip) + ':' + str(port) + ' is vulnerable over ' + tlslongver + '\033[0m'
-                    if display_null_bytes:
-                        print '[INFO] Displaying response:'
-                    else:
-                        print '[INFO] Displaying response (lines consisting entirely of null bytes are removed):'
-                    print ''
-                    hexdump(payload)
-                    print ''
+                    if not quietleak:
+                        if display_null_bytes:
+                            print '[INFO] Displaying response:'
+                        else:
+                            print '[INFO] Displaying response (lines consisting entirely of null bytes are removed):'
+                        print ''
+                        hexdump(payload)
+                        print ''
                     if verbose: print '[INFO] Closing connection\n'
                     sys.stdout.flush()
                     s.close()
@@ -230,7 +232,7 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
         return False
 
 def main():
-    global num_bytes_per_line, display_null_bytes, verbose
+    global num_bytes_per_line, display_null_bytes, verbose, quietleak
     
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--ports', type=str, default='443', help='Comma separated list of ports to check (default: 443)')
@@ -238,6 +240,7 @@ def main():
     parser.add_argument('-t', '--timeout', type=int, default=5, help='Connection timeout in seconds (default: 5)')
     parser.add_argument('-b', '--bytes', type=int, default=16, help='Number of leaked bytes to display per line (default 16)')
     parser.add_argument('-n', '--null-bytes', action='store_true', default=False, help='Display lines consisting entirely of null bytes (default: False)')
+    parser.add_argument('-q', '--quietleak', action='store_true', default=False, help='Do not print leaked memory bytes on fail (default: False)')
     parser.add_argument('-a', '--all-versions', action='store_true', default=False, help='Continue testing all versions of SSL/TLS even if the server is found to be vulnerable (default: False)')
     parser.add_argument('-V', '--version', type=str, default='all', help='Comma separated list of SSL/TLS versions to check. Valid values: SSLv3, TLSv1.0, TLSv1.1, TLSv1.2')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Verbose output.')
@@ -253,6 +256,7 @@ def main():
     num_bytes_per_line = args.bytes
     display_null_bytes = args.null_bytes
     verbose = args.verbose
+    quietleak = args.quietleak
     
     versions = []
     for v in [x.strip() for x in args.version.split(',')]:
