@@ -3,7 +3,7 @@
 # Hut3 Cardiac Arrest - A script to check OpenSSL servers for the Heartbleed bug (CVE-2014-0160).
 #
 # DISCLAIMER: There have been unconfirmed reports that this script can render HP iLO unresponsive.
-# This script complies with the TLS specification, so responsitivity issues are likely the result 
+# This script complies with the TLS specification, so responsitivity issues are likely the result
 # of a bad implementation of TLS on the server side. CNS Hut3 and Adrian Hayter do not accept
 # responsibility if this script crashes a server you test it against. USE IT AT YOUR OWN RISK.
 # As always, the correct way to test for the vulnerability is to check the version of OpenSSL
@@ -198,7 +198,11 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
             
             if type == 24:
                 if len(payload) > 3:
-                    print '\033[91m\033[1m[FAIL] Heartbeat response was ' + str(len(payload)) + ' bytes instead of 3! ' + str(ip) + ':' + str(port) + ' is vulnerable over ' + tlslongver + '\033[0m'
+                    if starttls == 'none':
+                        print '\033[91m\033[1m[FAIL] Heartbeat response was ' + str(len(payload)) + ' bytes instead of 3! ' + str(ip) + ':' + str(port) + ' is vulnerable over ' + tlslongver + '\033[0m'
+                    else:
+                        print '\033[91m\033[1m[FAIL] Heartbeat response was ' + str(len(payload)) + ' bytes instead of 3! ' + str(ip) + ':' + str(port) + ' is vulnerable over ' + tlslongver + ' with STARTTLS\033[0m'
+
                     if not quietleak:
                         if display_null_bytes:
                             print '[INFO] Displaying response:'
