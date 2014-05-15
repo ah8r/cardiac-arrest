@@ -206,7 +206,7 @@ def attack(ip, port, tlsversion, starttls='none', timeout=5):
                             print '[INFO] Displaying response (lines consisting entirely of null bytes are removed):'
                         print ''
                         hexdump(payload)
-                        print ''
+                    print ''
                     if verbose: print '[INFO] Closing connection\n'
                     sys.stdout.flush()
                     s.close()
